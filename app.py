@@ -2,7 +2,7 @@ import os
 import requests
 import json
 import redis
-from flask import Flask , jsonify
+from flask import Flask , jsonify , make_response
 import boto3
 
 
@@ -12,37 +12,38 @@ def get_seceret(*,secret_name=None,secret_key=None,region_name=None):
   secrets_client = boto3.client(service_name ="secretsmanager",region_name=region_name)
   response = secrets_client.get_secret_value(SecretId=secret_name)
   ipstack_secrets = json.loads(response['SecretString'])
-  return ipstack_secrets[secret_key] 
+  return ipstack_secrets[secret_key]
 
 
 
 def get_from_cache(*,host=None):
-  
-  try: 
+
+  try:
 
     redis_con = redis.Redis(host=redis_host,port=redis_port)
     cached_result = redis_con.get(host)
-     
+
     if cached_result:
 
       output = json.loads(cached_result)
       output["cached"] = "True"
+      output["apiServer"] = hostname
       return output
 
     else:
 
       return False
-    
+
   except:
 
     return "Error In get_from_cache function."
 
-    
- 
+
+
 
 
 def set_to_cache(*,host=None,ipgeolocation_key=None):
-  
+
   try:
 
     redis_con = redis.Redis(host=redis_host,port=redis_port)
@@ -50,36 +51,39 @@ def set_to_cache(*,host=None,ipgeolocation_key=None):
     geodata = requests.get(url=ipgeolocation_url)
     geodata = geodata.json()
     geodata["cached"] = "False"
+    geodata["apiServer"] = hostname
     redis_con.set(host,json.dumps(geodata))
     redis_con.expire(host,3600)
 
     return geodata
 
   except:
-   
+
     return "Error In set_to_cache function."
 
-    
+
 
 
 app = Flask(__name__)
 
-@app.route('/api/v1/<ip>')
+@app.route('/ip/<ip>',strict_slashes=False)
 def ipstack(ip=None):
-  
+
   output = get_from_cache(host=ip)
-  
-  if output: 
-    
+
+  if output:
+
     return jsonify(output)
-   
+
   output = set_to_cache(host=ip,ipgeolocation_key=ipgeolocation_key)
 
   return jsonify(output)
 
+@app.route('/status',strict_slashes=False)
+def check_status():
+  return make_response("",200)
 
 
-    
 
 
 
@@ -87,6 +91,7 @@ def ipstack(ip=None):
 
 if __name__ == "__main__":
 
+  hostname = os.getenv("HOSTNAME","none")
   redis_port = os.getenv("REDIS_PORT","6379")
   redis_host = os.getenv("REDIS_HOST",None)
   app_port = os.getenv("APP_PORT","8080")
@@ -102,13 +107,6 @@ if __name__ == "__main__":
                                     secret_key=ipgeolocation_key_name,
                                     region_name=aws_region )
 
-      
+
   app.run(port=app_port,host="0.0.0.0",debug=True)
-  
-
-
-
-
-
-
 
