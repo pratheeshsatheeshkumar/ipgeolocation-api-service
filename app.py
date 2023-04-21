@@ -84,11 +84,6 @@ def check_status():
   return make_response("",200)
 
 
-
-
-
-
-
 if __name__ == "__main__":
 
   hostname = os.getenv("HOSTNAME","none")
